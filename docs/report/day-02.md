@@ -86,3 +86,110 @@ Bước 16:
 Controller đóng gói LoginResponse vào ApiResponse và trả về FE.
 
 
+---
+
+## 3. JWT là gì?
+- là một tiêu chuẩn dùng để truyền tải thông tin an toàn giữa các bên dưới dạng đối tượng JSON. 
+- Nó thường được sử dụng để xác thực (Authentication) và ủy quyền (Authorization) người dùng
+
+Gồm 3 thành phần chính
+- Header: Chứa thông tin về kiểu dữ liệu (thường là JWT) và thuật toán được sử dụng để mã hóa.
+{
+    "alg": "HS256",
+    "typ": "JWT"
+}
+- Payload: Chứa dữ liệu như id, quyền, name, thời gian hết hạn token
+{
+    "sub": "1234567890",
+    "name": "John Doe",
+    "iat": 1516239022,
+    "exp": 1516239022,
+    "roles": ["USER", "ADMIN"]
+}
+- Signature: Mã hóa Header và Payload + secret key(key bí mật nào đó mà mình tạo ra)
+
+accessToken = {Base64Url(Header)} + {.} + {Base64Url(Payload)} + {.} + {Base64Url(Signature)}
+(thời gian ở trong payload ngắn)
+
+refreshToken = {Base64Url(Header)} + {.} + {Base64Url(Payload)} + {.} + {Base64Url(Signature)}
+(thời gian ở trong payload dài hơn, lưu ít thông tin ở payload hơn)
+-----------
+
+## 4. Role và Permission
+role dùng để phân nhóm người dùng như USER, ADMIN. 
+permission dùng để kiểm soát hành động chi tiết như tạo chuyển tiền, xác nhận chuyển tiền, xem giao dịch admin. 
+Em dùng @PreAuthorize để kiểm tra quyền trước khi cho phép gọi API.
+
+-----------
+CREATE TABLE refresh_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    expired_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_refresh_tokens_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+cách sử dụng JPA
+@ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "role_permissions",
+            joinColumns = @JoinColumn(name = "role_id"),
+            inverseJoinColumns = @JoinColumn(name = "permission_id")
+    )
+
+@Builder.Default
+    private Set<Roles> roles = new HashSet<>();
+
+    @PrePersist
+    public void prePersist() {
+        if (status == null) {
+            status = "ACTIVE";
+        }
+
+        deleted = false;
+        createdAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+}
+
+@EntityGraph(attributePaths = {"roles", "roles.permissions"})
+    Optional<Users> findByUsernameAndDeletedFalse(String username);
+
+@EnableMethodSecurity
