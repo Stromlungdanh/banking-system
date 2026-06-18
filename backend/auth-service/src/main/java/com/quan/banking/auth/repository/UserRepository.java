@@ -9,9 +9,12 @@ import java.util.Optional;
 
 @Repository
 public interface UserRepository extends JpaRepository<Users, Long> {
-    boolean existsByUsername (String username);
-    boolean existsByEmail (String email);
+    boolean existsByUsernameAndDeletedFalse(String username);
 
-    @EntityGraph(attributePaths = "roles")
-    Optional<Users> findByUsername(String username);
+    boolean existsByEmailAndDeletedFalse(String email);
+
+    @EntityGraph(attributePaths = {"roles", "roles.permissions"})
+    Optional<Users> findByUsernameAndDeletedFalse(String username);
+
+
 }

@@ -1,10 +1,7 @@
 package com.quan.banking.auth.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -14,14 +11,16 @@ import java.util.Set;
 @Table(name = "users")
 @NoArgsConstructor
 @AllArgsConstructor
-@Data
+@Getter
+@Setter
 @Builder
 public class Users {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(length = 100, nullable = false)
+    @Column(length = 100, nullable = false, unique = true)
     private String username;
 
     @Column(nullable = false)
@@ -47,11 +46,27 @@ public class Users {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
+    @Builder.Default
     private Set<Roles> roles = new HashSet<>();
+
+    @PrePersist
+    public void prePersist() {
+        if (status == null) {
+            status = "ACTIVE";
+        }
+
+        deleted = false;
+        createdAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

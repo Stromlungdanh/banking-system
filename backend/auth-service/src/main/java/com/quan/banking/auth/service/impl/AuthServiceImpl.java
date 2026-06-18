@@ -4,6 +4,8 @@ import com.quan.banking.auth.dto.request.LoginRequest;
 import com.quan.banking.auth.dto.request.RegisterRequest;
 import com.quan.banking.auth.dto.response.LoginResponse;
 import com.quan.banking.auth.dto.response.RegisterResponse;
+import com.quan.banking.auth.dto.response.UserProfileResponse;
+import com.quan.banking.auth.entity.Permission;
 import com.quan.banking.auth.entity.Roles;
 import com.quan.banking.auth.entity.Users;
 import com.quan.banking.auth.exception.BusinessException;
@@ -13,8 +15,6 @@ import com.quan.banking.auth.repository.UserRepository;
 import com.quan.banking.auth.security.JwtService;
 import com.quan.banking.auth.service.AuthService;
 import lombok.RequiredArgsConstructor;
-import org.hibernate.query.sql.internal.ParameterRecognizerImpl;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -22,30 +22,32 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
-    private final String ROLE_DEFAULT = "ROLE_USER";
+
+    private static final String ROLE_DEFAULT = "ROLE_USER";
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+
     @Override
     public RegisterResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.getUsername())) {
+        if (userRepository.existsByUsernameAndDeletedFalse(request.getUsername())) {
             throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
 
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmailAndDeletedFalse(request.getEmail())) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
-        Roles roles = roleRepository.findByCode(ROLE_DEFAULT)
+        Roles role = roleRepository.findByCode(ROLE_DEFAULT)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEFAULT_ROLE_NOT_FOUND));
 
         Users user = Users.builder()
@@ -54,10 +56,9 @@ public class AuthServiceImpl implements AuthService {
                 .email(request.getEmail())
                 .phone(request.getPhone())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .deleted(false)
-                .createdAt(LocalDateTime.now())
-                .roles(Set.of(roles))
+                .roles(Set.of(role))
                 .status("ACTIVE")
+                .deleted(false)
                 .build();
 
         Users savedUser = userRepository.save(user);
@@ -90,15 +91,55 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.INVALID_USERNAME_OR_PASSWORD);
         }
 
-        Users users = userRepository.findByUsername(request.getUsername())
+        Users user = userRepository.findByUsernameAndDeletedFalse(request.getUsername())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_USERNAME_OR_PASSWORD));
 
-        String accessToken = jwtService.generateAccessToken(users);
-        String refreshToken = jwtService.generateRefreshToken(users);
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
 
         return LoginResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .userId(user.getId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .roles(getRoles(user))
+                .permissions(getPermissions(user))
                 .build();
+    }
+
+    @Override
+    public UserProfileResponse getCurrentUser(String username) {
+        Users user = userRepository.findByUsernameAndDeletedFalse(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        return UserProfileResponse.builder()
+                .userId(user.getId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .status(user.getStatus())
+                .roles(getRoles(user))
+                .permissions(getPermissions(user))
+                .build();
+    }
+
+    private List<String> getRoles(Users user) {
+        return user.getRoles()
+                .stream()
+                .map(Roles::getCode)
+                .distinct()
+                .toList();
+    }
+
+    private List<String> getPermissions(Users user) {
+        return user.getRoles()
+                .stream()
+                .flatMap(role -> role.getPermissions().stream())
+                .map(Permission::getCode)
+                .distinct()
+                .toList();
     }
 }

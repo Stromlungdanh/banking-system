@@ -1,5 +1,6 @@
 package com.quan.banking.auth.security;
 
+import com.quan.banking.auth.entity.Permission;
 import com.quan.banking.auth.entity.Roles;
 import com.quan.banking.auth.entity.Users;
 import io.jsonwebtoken.Claims;
@@ -7,13 +8,16 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.List;
 
 @Service
 public class JwtService {
+
     @Value("${jwt.secret}")
     private String secret;
 
@@ -23,23 +27,37 @@ public class JwtService {
     @Value("${jwt.refresh-token-expiration-ms}")
     private Long refreshTokenExpirationMs;
 
-    public String generateAccessToken(Users users) {
-        return generateToken(users, accessTokenExpirationMs, "ACCESS_TOKEN");
+    public String generateAccessToken(Users user) {
+        return generateToken(user, accessTokenExpirationMs, "ACCESS_TOKEN");
     }
 
-    public String generateRefreshToken(Users users) {
-        return generateToken(users, refreshTokenExpirationMs, "REFRESH_TOKEN");
+    public String generateRefreshToken(Users user) {
+        return generateToken(user, refreshTokenExpirationMs, "REFRESH_TOKEN");
     }
 
-    private String generateToken(Users users, Long expirationMs, String tokenType) {
+    private String generateToken(Users user, Long expirationMs, String tokenType) {
         Date now = new Date();
         Date expiredAt = new Date(now.getTime() + expirationMs);
 
+        List<String> roles = user.getRoles()
+                .stream()
+                .map(Roles::getCode)
+                .distinct()
+                .toList();
+
+        List<String> permissions = user.getRoles()
+                .stream()
+                .flatMap(role -> role.getPermissions().stream())
+                .map(Permission::getCode)
+                .distinct()
+                .toList();
+
         return Jwts.builder()
-                .subject(users.getUsername())
-                .claim("userId", users.getId())
+                .subject(user.getUsername())
+                .claim("userId", user.getId())
                 .claim("tokenType", tokenType)
-                .claim("roles", users.getRoles().stream().map(Roles::getCode).toList())
+                .claim("roles", roles)
+                .claim("permissions", permissions)
                 .issuedAt(now)
                 .expiration(expiredAt)
                 .signWith(getSigningKey())
@@ -54,14 +72,16 @@ public class JwtService {
         return extractAllClaims(token).get("tokenType", String.class);
     }
 
-    public boolean isTokenExpired(String token) {
+    public boolean isTokenValid(String token, UserDetails userDetails) {
+        String username = extractUsername(token);
+
+        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+    }
+
+    private boolean isTokenExpired(String token) {
         Date expiration = extractAllClaims(token).getExpiration();
 
         return expiration.before(new Date());
-    }
-
-    public boolean isTokenValid(String token) {
-        return !isTokenExpired(token);
     }
 
     private Claims extractAllClaims(String token) {
@@ -77,5 +97,3 @@ public class JwtService {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }
-
-

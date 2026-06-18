@@ -6,19 +6,17 @@ import java.util.List;
 
 @Getter
 @Setter
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class LoginResponse {
-
-    private String accessToken;
-    private String refreshToken;
-    private String tokenType;
+@Builder
+public class UserProfileResponse {
 
     private Long userId;
     private String username;
     private String fullName;
-
+    private String email;
+    private String phone;
+    private String status;
     private List<String> roles;
     private List<String> permissions;
 }
